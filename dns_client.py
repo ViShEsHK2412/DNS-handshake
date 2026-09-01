@@ -37,9 +37,11 @@ def header(transId: int , flags : int , qdCount : int , ansCount : str , nsCount
 
     print(f" The length of the header is: {len(header)} , and the hex value is : {header.hex()}")
 
-    round = struct.unpack("!H" , header)
+    round = struct.unpack("!HHHHHH" , header)
 
     print(f"The round trip final ans is : {round}")
+
+header(0x1234,0x0100 , 1 , 0 , 0 , 0 )
 
 
 
