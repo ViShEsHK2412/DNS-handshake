@@ -1,4 +1,4 @@
-import socket
+import socket , struct
 
 with socket.socket(
     socket.AF_INET,
@@ -32,4 +32,15 @@ def converter(hostname: str) -> bytes:
     return converted
 
 
-print(converter("ww.google.com."))
+def header(transId: int , flags : int , qdCount : int , ansCount : str , nsCount : int , arCount : int) -> bytes:
+    header = struct.pack("!HHHHHH",transId,flags,qdCount,ansCount,nsCount,arCount)
+
+    print(f" The length of the header is: {len(header)} , and the hex value is : {header.hex()}")
+
+    round = struct.unpack("!H" , header)
+
+    print(f"The round trip final ans is : {round}")
+
+
+
+
