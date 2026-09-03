@@ -1,30 +1,28 @@
-import socket , struct
-
-with socket.socket(
-    socket.AF_INET,
-    socket.SOCK_DGRAM
-) as server:
-
-    server.sendto(
-        b"hello",
-        ("localhost", 8000)
-    )
-
+import socket
+import struct
 
 
 def converter(hostname: str) -> bytes:
-    if(hostname == ""):
+
+    if hostname == "":
         print("Invalid")
         raise ValueError("Hostname cannot be empty")
+
     if hostname.endswith('.'):
-        hostname = hostname.rstrip('.') 
+        hostname = hostname.rstrip('.')
+
     var = hostname.split(".")
+
     converted = b""
+
     for values in var:
+
         byteval = values.encode("utf-8")
         length = len(byteval)
+
         if length > 63:
             raise ValueError("Length Greater than 63")
+
         converted = converted + bytes([length]) + byteval
 
     converted = converted + b"\x00"
@@ -32,28 +30,43 @@ def converter(hostname: str) -> bytes:
     return converted
 
 
-def header(transId: int , flags : int , qdCount : int , ansCount : str , nsCount : int , arCount : int) -> bytes:
-    header = struct.pack("!HHHHHH",transId,flags,qdCount,ansCount,nsCount,arCount)
 
-    print(f" The length of the header is: {len(header)} , and the hex value is : {header.hex()}")
+def header(
+    transId: int,
+    flags: int,
+    qdCount: int,
+    ansCount: int,
+    nsCount: int,
+    arCount: int
+) -> bytes:
 
-    round = struct.unpack("!HHHHHH" , header)
+    dns_header = struct.pack(
+        "!HHHHHH",
+        transId,
+        flags,
+        qdCount,
+        ansCount,
+        nsCount,
+        arCount
+    )
 
-    print(f"The round trip final ans is : {round}")
+    return dns_header
 
 
 
 hostname = "google.com"
-# 1. Build the DNS header
+
 trans_id = 0x1234
-flags = 0x0100       # Standard query + recursion desired
+flags = 0x0100
+
 qd_count = 1
 ans_count = 0
 ns_count = 0
 ar_count = 0
 
-dns_header = struct.pack(
-    "!HHHHHH",
+
+# Build header
+dns_header = header(
     trans_id,
     flags,
     qd_count,
@@ -62,24 +75,30 @@ dns_header = struct.pack(
     ar_count
 )
 
-# 2. Build QNAME
+
+# Build QNAME
 qname = converter(hostname)
 
-# 2. Build QNAME
-qname = converter(hostname)
 
-# 3. Build QTYPE and QCLASS
-qtype = struct.pack("!H", 1)    # A record
-qclass = struct.pack("!H", 1)   # IN (Internet)
+# QTYPE = 1 → A record
+qtype = struct.pack("!H", 1)
 
-# 4. Assemble the complete DNS query
+
+# QCLASS = 1 → IN (Internet)
+qclass = struct.pack("!H", 1)
+
+
+# Assemble complete DNS query
 query = dns_header + qname + qtype + qclass
+
 
 print("DNS Query:")
 print(query.hex())
 
-# 5. Send query over UDP
+
+# Send query
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+
     sock.settimeout(5)
 
     sock.sendto(
@@ -87,23 +106,125 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         ("8.8.8.8", 53)
     )
 
-    # 6. Receive DNS response
     response, address = sock.recvfrom(4096)
+
 
 print("\nResponse received from:", address)
 print("Response length:", len(response))
 print("Response:")
 print(response.hex())
 
-# 7. Check transaction ID
-response_trans_id = struct.unpack("!H", response[:2])[0]
+# First 12 bytes are the DNS header
+header_data = response[:12]
 
-print("\nRequest Transaction ID:", hex(trans_id))
-print("Response Transaction ID:", hex(response_trans_id))
+
+# Convert the 12 raw bytes back into 6 integers
+header_fields = struct.unpack(
+    "!HHHHHH",
+    header_data
+)
+
+
+# Give each field a meaningful name
+(
+    response_trans_id,
+    response_flags,
+    response_qd_count,
+    response_an_count,
+    response_ns_count,
+    response_ar_count
+) = header_fields
+
+
+
+print("\n--- DNS Header ---")
+
+print(
+    "Transaction ID:",
+    hex(response_trans_id)
+)
+
+print(
+    "Flags:",
+    hex(response_flags)
+)
+
+print(
+    "QDCOUNT:",
+    response_qd_count
+)
+
+print(
+    "ANCOUNT:",
+    response_an_count
+)
+
+print(
+    "NSCOUNT:",
+    response_ns_count
+)
+
+print(
+    "ARCOUNT:",
+    response_ar_count
+)
+
 
 if response_trans_id != trans_id:
     raise ValueError("Transaction ID mismatch!")
 
 print("Transaction ID matched!")
 
+
+
+rcode = response_flags & 0x000F
+
+print("RCODE:", rcode)
+
+
+if rcode == 0:
+    print("No error")
+
+elif rcode == 2:
+    print("Server failure")
+
+elif rcode == 3:
+    print("NXDOMAIN: domain does not exist")
+
+elif rcode == 5:
+    print("Query refused")
+
+else:
+    print("Other DNS response code:", rcode)
+
+
+
+tc = bool(response_flags & 0x0200)
+
+print("TC:", tc)
+
+if tc:
+    print("Response is truncated")
+    print("A real DNS client should retry using TCP")
+
+
+ra = bool(response_flags & 0x0080)
+
+print("RA:", ra)
+
+if ra:
+    print("Server supports recursion")
+
+
+
+if response_an_count == 0:
+
+    print("No answer records")
+
+else:
+
+    print(
+        "Number of answer records:",
+        response_an_count
+    )
 
